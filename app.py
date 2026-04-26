@@ -192,5 +192,5 @@ if st.sidebar.button("Run Real-World Backtest"):
             st.subheader("📊 Performance vs Benchmark")
             
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
+            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")}
             col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100
