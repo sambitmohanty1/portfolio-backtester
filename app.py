@@ -3,7 +3,6 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import datetime
-import requests
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Multi-Region Backtester", layout="wide")
@@ -29,14 +28,8 @@ end_date_input = st.sidebar.date_input("End Date", datetime.date.today())
 def load_data(start_date, end_date):
     tickers_to_download = ALL_TICKERS + BENCHMARKS + [FX_TICKER]
     
-    # Create a custom session to masquerade as a standard web browser
-    session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    })
-    
-    # Pass the custom session to yfinance
-    data = yf.download(tickers_to_download, start=start_date, end=end_date, session=session)
+    # Let yfinance handle the connection session internally
+    data = yf.download(tickers_to_download, start=start_date, end=end_date)
     
     # Use 'Close' instead of 'Adj Close' due to yfinance updates
     prices = data['Close'].copy()
