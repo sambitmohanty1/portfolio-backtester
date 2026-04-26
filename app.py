@@ -107,6 +107,9 @@ if st.sidebar.button("Run Real-World Backtest"):
             # Fetch Data via Data Engine
             prices = load_data(my_tickers, earliest_date, end_date)
             
+            # FIX 1: Keep a raw copy of the prices in their ORIGINAL currency before the math engine converts them
+            raw_prices = prices.copy()
+            
             # Process Math via Portfolio Logic Module
             (port_cumulative, bench_cumulative, port_returns_series, bench_daily_returns, 
              total_cost_basis_aud, current_value, total_pnl, adjusted_prices) = calculate_daily_valuation(edited_portfolio, prices, earliest_date)
@@ -127,6 +130,133 @@ if st.sidebar.button("Run Real-World Backtest"):
                 
             alpha = port_kpis[1] - (RISK_FREE_RATE + beta * (bench_kpis[1] - RISK_FREE_RATE))
 
+            # --- 3. UI Rendering ---
+            st.subheader("💰 Real-World Financials (AUD)")
+            fin_col1, fin_col2, fin_col3 = st.columns(3)
+            fin_col1.metric("Total Invested (Cost Basis)", f"${total_cost_basis_aud:,.2f}")
+            fin_col2.metric("Current Portfolio Value", f"${current_value:,.2f}")
+            fin_col3.metric("Total Profit / Loss", f"${total_pnl:,.2f}", f"{(total_pnl/total_cost_basis_aud)*100:.2f}%")
+            
+            st.divider()
+
+            st.subheader("📦 Holdings Summary & Asset Breakdown")
+            summary_data = []
+            for ticker in my_tickers:
+                ticker_rows = edited_portfolio[edited_portfolio['Ticker'] == ticker]
+                total_shares = ticker_rows['Shares'].sum()
+                total_cost_orig = (ticker_rows['Shares'] * ticker_rows['Cost Price (Original Currency)']).sum()
+                avg_cost_orig = total_cost_orig / total_shares if total_shares > 0 else 0
+                
+                # FIX 2: Use the raw_prices copy to ensure US stocks display in USD, perfectly matching the original cost basis
+                current_price_orig = raw_prices[ticker].iloc[-1]
+                
+                # Calculate individual asset return percentage (Apples to Apples)
+                asset_return = ((current_price_orig - avg_cost_orig) / avg_cost_orig) * 100 if avg_cost_orig > 0 else 0
+                
+                summary_data.append({
+                    "Ticker": ticker,
+                    "Total Shares": total_shares,
+                    "Avg Cost Price (Orig Currency)": f"${avg_cost_orig:.2f}",
+                    "Current Price (Orig Currency)": f"${current_price_orig:.2f}",
+                    "Total Return (%)": asset_return
+                })
+                
+            summary_df = pd.DataFrame(summary_data)
+            
+            # Display the table, formatting the return column cleanly
+            st.dataframe(summary_df.style.format({"Total Return (%)": "{:.2f}%"}), use_container_width=True, hide_index=True)
+
+            # --- DYNAMIC PLOTLY CHART (Horizontal with Red/Green Gradient) ---
+            summary_df = summary_df.sort_values('Total Return (%)', ascending=True)
+            
+            # FIX 3: Dynamic height scaling ensures all tickers are drawn without being squished or hidden
+            chart_height = max(400, len(summary_df) * 35)
+            
+            fig = px.bar(
+                summary_df,
+                x='Total Return (%)',
+                y='Ticker',
+                orientation='h',
+                color='Total Return (%)',
+                color_continuous_scale=px.colors.diverging.RdYlGn,
+                color_continuous_midpoint=0,
+                title="Individual Asset Performance (Drags vs Drivers)",
+                height=chart_height
+            )
+            fig.update_layout(coloraxis_showscale=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.divider()
+
+            # --- PERFORMANCE VS BENCHMARK ---
+            st.subheader("📊 Performance vs Benchmark")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
+            col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100:.2f}%")
+            col3.metric("Alpha (Annual)", f"{alpha*100:.2f}%")
+            col4.metric("Beta vs Benchmark", f"{beta:.2f}")
+
+            col5, col6, col7, col8 = st.columns(4)
+            col5.metric("Max Drawdown", f"{port_kpis[3]*100:.2f}%")
+            col6.metric("Ann. Volatility", f"{port_kpis[2]*100:.2f}%")
+            col7.metric("Sharpe Ratio", f"{port_kpis[4]:.2f}")
+            col8.metric("Sortino Ratio", f"{port_kpis[5]:.2f}")
+
+            st.subheader("Relative Growth ($1 Invested): Portfolio vs 50/50 Benchmark")
+            chart_data = pd.DataFrame({
+                'Portfolio Return Trajectory': port_cumulative,
+                '50/50 Benchmark Trajectory': bench_cumulative
+            })
+            st.line_chart(chart_data)
+
+            st.divider()
+
+            # --- EXPORT TO CONSULTANT GEM ---
+            st.subheader("🤖 Export to Consultant Gem")
+            st.write("Generate a raw quant report to paste directly into your Consultant Gem for AI optimization.")
+            
+            if st.button("Crunch Data & Generate Report"):
+                with st.spinner("Calculating Correlations, Betas, and Drawdowns..."):
+                    peak = port_cumulative.cummax()
+                    drawdown = (port_cumulative - peak) / peak
+                    max_dd_date = drawdown.idxmin()
+
+                    returns = prices[my_tickers].pct_change().dropna()
+                    asset_betas = {}
+                    bench_var = np.var(bench_daily_returns)
+                    for t in my_tickers:
+                        cov = np.cov(returns[t], bench_daily_returns)[0][1]
+                        asset_betas[t] = cov / bench_var if bench_var > 0 else 1
+
+                    corr_matrix = returns.corr()
+                    corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
+                    corr_pairs = corr_pairs[corr_pairs < 0.999].head(5)
+
+                    report_text = f"""### 📊 QUANT PORTFOLIO DATA EXPORT
+*Date Generated: {datetime.date.today()}*
+
+**1. TOP-LEVEL METRICS**
+- **Time-Weighted CAGR:** {port_kpis[1]*100:.2f}%
+- **Portfolio Beta:** {beta:.2f}
+- **Maximum Drawdown:** {port_kpis[3]*100:.2f}% *(Hit exact bottom on: {max_dd_date.strftime('%Y-%m-%d')})*
+- **Annual Alpha:** {alpha*100:.2f}%
+
+**2. INDIVIDUAL ASSET RISK CONTRIBUTIONS (BETAS)**
+"""
+                    for t, b in asset_betas.items():
+                        report_text += f"- **{t}**: {b:.2f}\n"
+
+                    report_text += "\n**3. HIGH CORRELATION WARNINGS**\n"
+                    for pair, val in corr_pairs.items():
+                        report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
+
+                    report_text += "\n**4. ASSET RETURN DRIVERS**\n"
+                    for index, row in summary_df.iterrows():
+                        report_text += f"- **{row['Ticker']}**: {row['Total Return (%)']:.2f}%\n"
+
+                    st.code(report_text, language='markdown')
+                    st.success("👆 Click the 'Copy' icon in the top right of the box above, and paste it into your Consultant Gem!")
             # --- 3. UI Rendering ---
             st.subheader("💰 Real-World Financials (AUD)")
             fin_col1, fin_col2, fin_col3 = st.columns(3)
