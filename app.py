@@ -1,3 +1,4 @@
+import plotly.express as px
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -145,7 +146,7 @@ if st.sidebar.button("Run Real-World Backtest"):
                 
                 current_price_orig = adjusted_prices[ticker].iloc[-1]
                 
-                # NEW: Calculate individual asset return percentage
+                # Calculate individual asset return percentage
                 asset_return = ((current_price_orig - avg_cost_orig) / avg_cost_orig) * 100 if avg_cost_orig > 0 else 0
                 
                 summary_data.append({
@@ -153,39 +154,34 @@ if st.sidebar.button("Run Real-World Backtest"):
                     "Total Shares": total_shares,
                     "Avg Cost Price (Orig Currency)": f"${avg_cost_orig:.2f}",
                     "Current Price (Orig Currency)": f"${current_price_orig:.2f}",
-                    "Total Return (%)": asset_return # Store as raw number for charting
+                    "Total Return (%)": asset_return
                 })
                 
             summary_df = pd.DataFrame(summary_data)
             
-            # Display the table, formatting the return column
+            # Display the table, formatting the return column cleanly
             st.dataframe(summary_df.style.format({"Total Return (%)": "{:.2f}%"}), use_container_width=True, hide_index=True)
 
-            # NEW: Render the Individual Asset Bar Chart
-            st.bar_chart(summary_df.set_index('Ticker')['Total Return (%)'])
-                
-            summary_df = pd.DataFrame(summary_data)
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            # --- DYNAMIC PLOTLY CHART (Horizontal with Red/Green Gradient) ---
+            summary_df = summary_df.sort_values('Total Return (%)', ascending=True)
+            
+            fig = px.bar(
+                summary_df,
+                x='Total Return (%)',
+                y='Ticker',
+                orientation='h',
+                color='Total Return (%)',
+                color_continuous_scale=px.colors.diverging.RdYlGn,
+                color_continuous_midpoint=0, # Ensures 0 is the exact split between Red and Green
+                title="Individual Asset Performance (Drags vs Drivers)"
+            )
+            fig.update_layout(coloraxis_showscale=False) # Hide the color legend for a cleaner look
+            st.plotly_chart(fig, use_container_width=True)
 
             st.divider()
 
+            # --- PERFORMANCE VS BENCHMARK ---
             st.subheader("📊 Performance vs Benchmark")
             
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
-            col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100:.2f}%")
-            col3.metric("Alpha (Annual)", f"{alpha*100:.2f}%")
-            col4.metric("Beta vs Benchmark", f"{beta:.2f}")
-
-            col5, col6, col7, col8 = st.columns(4)
-            col5.metric("Max Drawdown", f"{port_kpis[3]*100:.2f}%")
-            col6.metric("Ann. Volatility", f"{port_kpis[2]*100:.2f}%")
-            col7.metric("Sharpe Ratio", f"{port_kpis[4]:.2f}")
-            col8.metric("Sortino Ratio", f"{port_kpis[5]:.2f}")
-
-            st.subheader("Relative Growth ($1 Invested): Portfolio vs 50/50 Benchmark")
-            chart_data = pd.DataFrame({
-                'Portfolio Return Trajectory': port_cumulative,
-                '50/50 Benchmark Trajectory': bench_cumulative
-            })
-            st.line_chart(chart_data)
+            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.
