@@ -119,4 +119,50 @@ if st.sidebar.button("Run Real-World Backtest"):
             st.subheader("💰 Real-World Financials (AUD)")
             fin_col1, fin_col2, fin_col3 = st.columns(3)
             fin_col1.metric("Total Invested (Cost Basis)", f"${total_cost_basis_aud:,.2f}")
-            fin_col2.metric("Current Portfolio
+            fin_col2.metric("Current Portfolio Value", f"${current_value:,.2f}")
+            fin_col3.metric("Total Profit / Loss", f"${total_pnl:,.2f}", f"{(total_pnl/total_cost_basis_aud)*100:.2f}%")
+            
+            st.divider()
+
+            st.subheader("📦 Holdings Summary (Average Cost Basis)")
+            summary_data = []
+            for ticker in my_tickers:
+                ticker_rows = edited_portfolio[edited_portfolio['Ticker'] == ticker]
+                total_shares = ticker_rows['Shares'].sum()
+                total_cost_orig = (ticker_rows['Shares'] * ticker_rows['Cost Price (Original Currency)']).sum()
+                avg_cost_orig = total_cost_orig / total_shares if total_shares > 0 else 0
+                
+                current_price_orig = adjusted_prices[ticker].iloc[-1]
+                
+                summary_data.append({
+                    "Ticker": ticker,
+                    "Total Shares": total_shares,
+                    "Avg Cost Price (Orig Currency)": f"${avg_cost_orig:.2f}",
+                    "Current Price (Orig Currency)": f"${current_price_orig:.2f}"
+                })
+                
+            summary_df = pd.DataFrame(summary_data)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+            st.divider()
+
+            st.subheader("📊 Performance vs Benchmark")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
+            col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100:.2f}%")
+            col3.metric("Alpha (Annual)", f"{alpha*100:.2f}%")
+            col4.metric("Beta vs Benchmark", f"{beta:.2f}")
+
+            col5, col6, col7, col8 = st.columns(4)
+            col5.metric("Max Drawdown", f"{port_kpis[3]*100:.2f}%")
+            col6.metric("Ann. Volatility", f"{port_kpis[2]*100:.2f}%")
+            col7.metric("Sharpe Ratio", f"{port_kpis[4]:.2f}")
+            col8.metric("Sortino Ratio", f"{port_kpis[5]:.2f}")
+
+            st.subheader("Relative Growth ($1 Invested): Portfolio vs 50/50 Benchmark")
+            chart_data = pd.DataFrame({
+                'Portfolio Return Trajectory': port_cumulative,
+                '50/50 Benchmark Trajectory': bench_cumulative
+            })
+            st.line_chart(chart_data)
