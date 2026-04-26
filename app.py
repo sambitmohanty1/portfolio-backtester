@@ -236,24 +236,28 @@ if st.sidebar.button("Run Real-World Backtest"):
             st.subheader("🤖 Export to Consultant Gem")
             st.write("Generate a raw quant report to paste directly into your Consultant Gem for AI optimization.")
             
-            if st.button("Crunch Data & Generate Report"):
-                with st.spinner("Calculating Correlations, Betas, and Drawdowns..."):
-                    peak = port_cumulative.cummax()
-                    drawdown = (port_cumulative - peak) / peak
-                    max_dd_date = drawdown.idxmin()
+            # Use an expander instead of a button so the page doesn't refresh!
+            with st.expander("Click here to generate and view the Quant Report"):
+                # 1. Drawdown Date Analysis
+                peak = port_cumulative.cummax()
+                drawdown = (port_cumulative - peak) / peak
+                max_dd_date = drawdown.idxmin()
 
-                    returns = prices[my_tickers].pct_change().dropna()
-                    asset_betas = {}
-                    bench_var = np.var(bench_daily_returns)
-                    for t in my_tickers:
-                        cov = np.cov(returns[t], bench_daily_returns)[0][1]
-                        asset_betas[t] = cov / bench_var if bench_var > 0 else 1
+                # 2. Individual Asset Betas
+                returns = prices[my_tickers].pct_change().dropna()
+                asset_betas = {}
+                bench_var = np.var(bench_daily_returns)
+                for t in my_tickers:
+                    cov = np.cov(returns[t], bench_daily_returns)[0][1]
+                    asset_betas[t] = cov / bench_var if bench_var > 0 else 1
 
-                    corr_matrix = returns.corr()
-                    corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
-                    corr_pairs = corr_pairs[corr_pairs < 0.999].head(5)
+                # 3. Correlation Matrix (Top Pairs)
+                corr_matrix = returns.corr()
+                corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
+                corr_pairs = corr_pairs[corr_pairs < 0.999].head(5)
 
-                    report_text = f"""### 📊 QUANT PORTFOLIO DATA EXPORT
+                # 4. Generate the Markdown Report
+                report_text = f"""### 📊 QUANT PORTFOLIO DATA EXPORT
 *Date Generated: {datetime.date.today()}*
 
 **1. TOP-LEVEL METRICS**
@@ -264,16 +268,16 @@ if st.sidebar.button("Run Real-World Backtest"):
 
 **2. INDIVIDUAL ASSET RISK CONTRIBUTIONS (BETAS)**
 """
-                    for t, b in asset_betas.items():
-                        report_text += f"- **{t}**: {b:.2f}\n"
+                for t, b in asset_betas.items():
+                    report_text += f"- **{t}**: {b:.2f}\n"
 
-                    report_text += "\n**3. HIGH CORRELATION WARNINGS**\n"
-                    for pair, val in corr_pairs.items():
-                        report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
+                report_text += "\n**3. HIGH CORRELATION WARNINGS**\n"
+                for pair, val in corr_pairs.items():
+                    report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
 
-                    report_text += "\n**4. SECTOR RETURN DRIVERS**\n"
-                    for index, row in summary_df.iterrows():
-                        report_text += f"- **{row['Ticker']} ({row['Theme']})**: {row['Total Return (%)']:.2f}%\n"
+                report_text += "\n**4. SECTOR RETURN DRIVERS**\n"
+                for index, row in summary_df.iterrows():
+                    report_text += f"- **{row['Ticker']} ({row['Theme']})**: {row['Total Return (%)']:.2f}%\n"
 
-                    st.code(report_text, language='markdown')
-                    st.success("👆 Click the 'Copy' icon in the top right of the box above, and paste it into your Consultant Gem!")
+                st.code(report_text, language='markdown')
+                st.success("👆 Click the 'Copy' icon in the top right of the code box above, and paste it into your Consultant Gem!")
