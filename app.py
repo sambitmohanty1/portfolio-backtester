@@ -3,6 +3,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import datetime
+import requests
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Multi-Region Backtester", layout="wide")
@@ -27,7 +28,15 @@ end_date_input = st.sidebar.date_input("End Date", datetime.date.today())
 @st.cache_data
 def load_data(start_date, end_date):
     tickers_to_download = ALL_TICKERS + BENCHMARKS + [FX_TICKER]
-    data = yf.download(tickers_to_download, start=start_date, end=end_date)
+    
+    # Create a custom session to masquerade as a standard web browser
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    
+    # Pass the custom session to yfinance
+    data = yf.download(tickers_to_download, start=start_date, end=end_date, session=session)
     
     # Use 'Close' instead of 'Adj Close' due to yfinance updates
     prices = data['Close'].copy()
@@ -89,3 +98,44 @@ if st.sidebar.button("Run Backtest"):
             peak = cumulative.cummax()
             drawdown = (cumulative - peak) / peak
             max_dd = drawdown.min()
+            
+            sharpe = (cagr - RISK_FREE_RATE) / ann_volatility
+            downside_std = returns_series[returns_series < 0].std() * np.sqrt(252)
+            sortino = (cagr - RISK_FREE_RATE) / downside_std if downside_std > 0 else np.nan
+            
+            return total_return, cagr, ann_volatility, max_dd, sharpe, sortino
+
+        total_days = len(port_returns_series)
+        years = total_days / 252
+
+        port_kpis = calculate_kpis(port_returns_series, years)
+        bench_kpis = calculate_kpis(bench_daily_returns, years)
+
+        covariance = np.cov(port_returns_series, bench_daily_returns)[0][1]
+        variance = np.var(bench_daily_returns)
+        beta = covariance / variance
+        alpha = port_kpis[1] - (RISK_FREE_RATE + beta * (bench_kpis[1] - RISK_FREE_RATE))
+
+        # --- 6. Streamlit UI Rendering ---
+        st.subheader("Performance Dashboard (AUD)")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
+        col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100:.2f}%")
+        col3.metric("Alpha (Annual)", f"{alpha*100:.2f}%")
+        col4.metric("Beta vs Benchmark", f"{beta:.2f}")
+
+        col5, col6, col7, col8 = st.columns(4)
+        col5.metric("Max Drawdown", f"{port_kpis[3]*100:.2f}%")
+        col6.metric("Ann. Volatility", f"{port_kpis[2]*100:.2f}%")
+        col7.metric("Sharpe Ratio", f"{port_kpis[4]:.2f}")
+        col8.metric("Sortino Ratio", f"{port_kpis[5]:.2f}")
+
+        st.subheader("Cumulative Growth: Portfolio vs 50/50 Benchmark")
+        chart_data = pd.DataFrame({
+            'Portfolio': port_cumulative,
+            '50/50 Benchmark': bench_cumulative
+        })
+        st.line_chart(chart_data)
+else:
+    st.info("Adjust your parameters in the sidebar and click 'Run Backtest' to start.")
