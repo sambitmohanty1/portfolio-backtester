@@ -251,4 +251,29 @@ if st.sidebar.button("Run Real-World Backtest"):
 
                     corr_matrix = returns.corr()
                     corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
-                    corr_pairs = corr_pairs[corr_pairs < 0.9
+                    corr_pairs = corr_pairs[corr_pairs < 0.999].head(5)
+
+                    report_text = f"""### 📊 QUANT PORTFOLIO DATA EXPORT
+*Date Generated: {datetime.date.today()}*
+
+**1. TOP-LEVEL METRICS**
+- **Time-Weighted CAGR:** {port_kpis[1]*100:.2f}%
+- **Portfolio Beta:** {beta:.2f}
+- **Maximum Drawdown:** {port_kpis[3]*100:.2f}% *(Hit exact bottom on: {max_dd_date.strftime('%Y-%m-%d')})*
+- **Annual Alpha:** {alpha*100:.2f}%
+
+**2. INDIVIDUAL ASSET RISK CONTRIBUTIONS (BETAS)**
+"""
+                    for t, b in asset_betas.items():
+                        report_text += f"- **{t}**: {b:.2f}\n"
+
+                    report_text += "\n**3. HIGH CORRELATION WARNINGS**\n"
+                    for pair, val in corr_pairs.items():
+                        report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
+
+                    report_text += "\n**4. SECTOR RETURN DRIVERS**\n"
+                    for index, row in summary_df.iterrows():
+                        report_text += f"- **{row['Ticker']} ({row['Theme']})**: {row['Total Return (%)']:.2f}%\n"
+
+                    st.code(report_text, language='markdown')
+                    st.success("👆 Click the 'Copy' icon in the top right of the box above, and paste it into your Consultant Gem!")
