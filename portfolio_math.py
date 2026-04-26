@@ -16,14 +16,17 @@ def calculate_daily_valuation(edited_portfolio, prices, earliest_date):
 
     portfolio_daily_value = pd.DataFrame(index=prices.index)
     portfolio_daily_value['Total'] = 0.0
+    
+    # NEW: Track daily cash inflows to fix the Time-Weighted Return bug
+    inflows = pd.Series(0.0, index=prices.index)
     total_cost_basis_aud = 0.0
 
     # Calculate daily value for each specific lot
     for index, row in edited_portfolio.iterrows():
         ticker = row['Ticker']
         buy_date = pd.to_datetime(row['Buy Date'])
-        shares = row['Shares']
-        cost_price = row['Cost Price (Original Currency)']
+        shares = float(row['Shares'])
+        cost_price = float(row['Cost Price (Original Currency)'])
         
         if buy_date not in prices.index:
             try:
@@ -41,6 +44,11 @@ def calculate_daily_valuation(edited_portfolio, prices, earliest_date):
         
         total_cost_basis_aud += cost_basis_aud
         
+        # NEW: Record the cash inflow (value of shares added) on the exact buy date
+        buy_day_close_value_aud = prices[ticker].loc[valid_buy_date] * shares
+        inflows.loc[valid_buy_date] += buy_day_close_value_aud
+        
+        # Build the historical value of these specific shares
         daily_share_value = prices[ticker].copy()
         daily_share_value.loc[:valid_buy_date - pd.Timedelta(days=1)] = 0.0 
         daily_share_value.loc[valid_buy_date:] = daily_share_value.loc[valid_buy_date:] * shares
@@ -48,8 +56,21 @@ def calculate_daily_valuation(edited_portfolio, prices, earliest_date):
         portfolio_daily_value['Total'] += daily_share_value
 
     portfolio_daily_value = portfolio_daily_value[portfolio_daily_value.index >= earliest_date]
-    port_returns_series = portfolio_daily_value['Total'].pct_change().dropna()
+    inflows = inflows[inflows.index >= earliest_date]
     
+    # --- TRUE TIME-WEIGHTED RETURN CALCULATION ---
+    # Formula: (Value_Today - Inflow_Today - Value_Yesterday) / Value_Yesterday
+    val_t = portfolio_daily_value['Total']
+    val_t_minus_1 = val_t.shift(1)
+    
+    # Prevent division by zero on the very first day of the portfolio
+    val_t_minus_1 = val_t_minus_1.replace(0.0, np.nan)
+    
+    port_returns_series = (val_t - inflows - val_t_minus_1) / val_t_minus_1
+    port_returns_series.iloc[0] = 0.0 # Set first day return cleanly to 0
+    port_returns_series = port_returns_series.dropna()
+    
+    # Calculate Total Financials
     current_value = portfolio_daily_value['Total'].iloc[-1]
     total_pnl = current_value - total_cost_basis_aud
 
