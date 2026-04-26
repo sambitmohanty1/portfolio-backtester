@@ -232,52 +232,64 @@ if st.sidebar.button("Run Real-World Backtest"):
 
             st.divider()
 
-            # --- EXPORT TO CONSULTANT GEM ---
+           # --- EXPORT TO CONSULTANT GEM ---
             st.subheader("🤖 Export to Consultant Gem")
             st.write("Generate a raw quant report to paste directly into your Consultant Gem for AI optimization.")
             
-            # Use an expander instead of a button so the page doesn't refresh!
-            with st.expander("Click here to generate and view the Quant Report"):
-                # 1. Drawdown Date Analysis
-                peak = port_cumulative.cummax()
-                drawdown = (port_cumulative - peak) / peak
-                max_dd_date = drawdown.idxmin()
+            with st.expander("Click here to generate and view the Advanced Quant Report"):
+                with st.spinner("Calculating Advanced Quant Metrics..."):
+                    # 1. Drawdown Date Analysis
+                    peak = port_cumulative.cummax()
+                    drawdown = (port_cumulative - peak) / peak
+                    max_dd_date = drawdown.idxmin()
 
-                # 2. Individual Asset Betas
-                returns = prices[my_tickers].pct_change().dropna()
-                asset_betas = {}
-                bench_var = np.var(bench_daily_returns)
-                for t in my_tickers:
-                    cov = np.cov(returns[t], bench_daily_returns)[0][1]
-                    asset_betas[t] = cov / bench_var if bench_var > 0 else 1
+                    # 2. Individual Asset Betas
+                    returns = prices[my_tickers].pct_change().dropna()
+                    asset_betas = {}
+                    bench_var = np.var(bench_daily_returns)
+                    for t in my_tickers:
+                        cov = np.cov(returns[t], bench_daily_returns)[0][1]
+                        asset_betas[t] = cov / bench_var if bench_var > 0 else 1
 
-                # 3. Correlation Matrix (Top Pairs)
-                corr_matrix = returns.corr()
-                corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
-                corr_pairs = corr_pairs[corr_pairs < 0.999].head(5)
+                    # 3. Expanded Correlation Matrix (Top 10 Pairs)
+                    corr_matrix = returns.corr()
+                    corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
+                    corr_pairs = corr_pairs[corr_pairs < 0.999].head(10)
 
-                # 4. Generate the Markdown Report
-                report_text = f"""### 📊 QUANT PORTFOLIO DATA EXPORT
+                    # 4. Generate the Advanced Markdown Report
+                    report_text = f"""### 📊 ADVANCED QUANT PORTFOLIO DATA EXPORT
 *Date Generated: {datetime.date.today()}*
 
-**1. TOP-LEVEL METRICS**
-- **Time-Weighted CAGR:** {port_kpis[1]*100:.2f}%
+**1. TOP-LEVEL PERFORMANCE & RISK METRICS**
+- **Time-Weighted CAGR:** {port_kpis[1]*100:.2f}% *(vs Benchmark: {bench_kpis[1]*100:.2f}%)*
+- **Annualized Volatility:** {port_kpis[2]*100:.2f}%
+- **Sharpe Ratio:** {port_kpis[4]:.2f}
+- **Sortino Ratio:** {port_kpis[5]:.2f}
 - **Portfolio Beta:** {beta:.2f}
-- **Maximum Drawdown:** {port_kpis[3]*100:.2f}% *(Hit exact bottom on: {max_dd_date.strftime('%Y-%m-%d')})*
 - **Annual Alpha:** {alpha*100:.2f}%
+- **Maximum Drawdown:** {port_kpis[3]*100:.2f}% *(Hit exact bottom on: {max_dd_date.strftime('%Y-%m-%d')})*
 
-**2. INDIVIDUAL ASSET RISK CONTRIBUTIONS (BETAS)**
+**2. CURRENT ASSET ALLOCATION (WEIGHTS)**
+*(Consultant: Use these exact weights to run Markowitz Efficient Frontier optimizations and suggest rebalancing limits)*
 """
-                for t, b in asset_betas.items():
-                    report_text += f"- **{t}**: {b:.2f}\n"
+                    for t in my_tickers:
+                        t_shares = edited_portfolio[edited_portfolio['Ticker'] == t]['Shares'].sum()
+                        # Use the uniform AUD adjusted prices to calculate accurate portfolio weighting
+                        t_val_aud = adjusted_prices[t].iloc[-1] * t_shares
+                        weight = (t_val_aud / current_value) * 100 if current_value > 0 else 0
+                        report_text += f"- **{t}**: {weight:.2f}%\n"
 
-                report_text += "\n**3. HIGH CORRELATION WARNINGS**\n"
-                for pair, val in corr_pairs.items():
-                    report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
+                    report_text += "\n**3. INDIVIDUAL ASSET RISK CONTRIBUTIONS (BETAS)**\n*(Consultant: Identify which assets are causing the portfolio's volatility spikes vs the benchmark)*\n"
+                    for t, b in asset_betas.items():
+                        report_text += f"- **{t}**: {b:.2f}\n"
 
-                report_text += "\n**4. SECTOR RETURN DRIVERS**\n"
-                for index, row in summary_df.iterrows():
-                    report_text += f"- **{row['Ticker']} ({row['Theme']})**: {row['Total Return (%)']:.2f}%\n"
+                    report_text += "\n**4. HIGH CORRELATION WARNINGS (Top 10 Pairs)**\n*(Consultant: Suggest replacement assets if portfolio lacks true diversification)*\n"
+                    for pair, val in corr_pairs.items():
+                        report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
 
-                st.code(report_text, language='markdown')
-                st.success("👆 Click the 'Copy' icon in the top right of the code box above, and paste it into your Consultant Gem!")
+                    report_text += "\n**5. SECTOR & ASSET RETURN DRIVERS**\n*(Consultant: Analyze which sectors are outperforming and which are dragging down the CAGR)*\n"
+                    for index, row in summary_df.iterrows():
+                        report_text += f"- **{row['Ticker']} ({row['Theme']})**: {row['Total Return (%)']:.2f}%\n"
+
+                    st.code(report_text, language='markdown')
+                    st.success("👆 Click the 'Copy' icon in the top right of the code box above, and paste it into your Consultant Gem!")
