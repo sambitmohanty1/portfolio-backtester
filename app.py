@@ -21,7 +21,11 @@ REQUIRED_COLUMNS = ["Ticker", "Buy Date", "Shares", "Cost Price (Original Curren
 
 if uploaded_file is not None:
     try:
-        raw_df = pd.read_csv(uploaded_file)
+        # utf-8-sig removes hidden BOM characters that break column name matching
+        raw_df = pd.read_csv(uploaded_file, encoding='utf-8-sig')
+        
+        # Strip trailing spaces from column names to ensure perfect matching
+        raw_df.columns = raw_df.columns.str.strip()
         
         # Auto-Detect Broker Export Format
         if 'AsxCode' in raw_df.columns and 'Trade Date' in raw_df.columns:
