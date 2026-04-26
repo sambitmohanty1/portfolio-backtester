@@ -135,7 +135,7 @@ if st.sidebar.button("Run Real-World Backtest"):
             
             st.divider()
 
-            st.subheader("📦 Holdings Summary (Average Cost Basis)")
+            st.subheader("📦 Holdings Summary & Asset Breakdown")
             summary_data = []
             for ticker in my_tickers:
                 ticker_rows = edited_portfolio[edited_portfolio['Ticker'] == ticker]
@@ -145,12 +145,24 @@ if st.sidebar.button("Run Real-World Backtest"):
                 
                 current_price_orig = adjusted_prices[ticker].iloc[-1]
                 
+                # NEW: Calculate individual asset return percentage
+                asset_return = ((current_price_orig - avg_cost_orig) / avg_cost_orig) * 100 if avg_cost_orig > 0 else 0
+                
                 summary_data.append({
                     "Ticker": ticker,
                     "Total Shares": total_shares,
                     "Avg Cost Price (Orig Currency)": f"${avg_cost_orig:.2f}",
-                    "Current Price (Orig Currency)": f"${current_price_orig:.2f}"
+                    "Current Price (Orig Currency)": f"${current_price_orig:.2f}",
+                    "Total Return (%)": asset_return # Store as raw number for charting
                 })
+                
+            summary_df = pd.DataFrame(summary_data)
+            
+            # Display the table, formatting the return column
+            st.dataframe(summary_df.style.format({"Total Return (%)": "{:.2f}%"}), use_container_width=True, hide_index=True)
+
+            # NEW: Render the Individual Asset Bar Chart
+            st.bar_chart(summary_df.set_index('Ticker')['Total Return (%)'])
                 
             summary_df = pd.DataFrame(summary_data)
             st.dataframe(summary_df, use_container_width=True, hide_index=True)
