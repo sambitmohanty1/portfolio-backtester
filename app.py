@@ -172,10 +172,10 @@ if st.sidebar.button("Run Real-World Backtest"):
                 orientation='h',
                 color='Total Return (%)',
                 color_continuous_scale=px.colors.diverging.RdYlGn,
-                color_continuous_midpoint=0, # Ensures 0 is the exact split between Red and Green
+                color_continuous_midpoint=0,
                 title="Individual Asset Performance (Drags vs Drivers)"
             )
-            fig.update_layout(coloraxis_showscale=False) # Hide the color legend for a cleaner look
+            fig.update_layout(coloraxis_showscale=False)
             st.plotly_chart(fig, use_container_width=True)
 
             st.divider()
@@ -184,4 +184,73 @@ if st.sidebar.button("Run Real-World Backtest"):
             st.subheader("📊 Performance vs Benchmark")
             
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.
+            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
+            col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100:.2f}%")
+            col3.metric("Alpha (Annual)", f"{alpha*100:.2f}%")
+            col4.metric("Beta vs Benchmark", f"{beta:.2f}")
+
+            col5, col6, col7, col8 = st.columns(4)
+            col5.metric("Max Drawdown", f"{port_kpis[3]*100:.2f}%")
+            col6.metric("Ann. Volatility", f"{port_kpis[2]*100:.2f}%")
+            col7.metric("Sharpe Ratio", f"{port_kpis[4]:.2f}")
+            col8.metric("Sortino Ratio", f"{port_kpis[5]:.2f}")
+
+            st.subheader("Relative Growth ($1 Invested): Portfolio vs 50/50 Benchmark")
+            chart_data = pd.DataFrame({
+                'Portfolio Return Trajectory': port_cumulative,
+                '50/50 Benchmark Trajectory': bench_cumulative
+            })
+            st.line_chart(chart_data)
+
+            st.divider()
+
+            # --- EXPORT TO CONSULTANT GEM ---
+            st.subheader("🤖 Export to Consultant Gem")
+            st.write("Generate a raw quant report to paste directly into your Consultant Gem for AI optimization.")
+            
+            if st.button("Crunch Data & Generate Report"):
+                with st.spinner("Calculating Correlations, Betas, and Drawdowns..."):
+                    # 1. Drawdown Date Analysis
+                    peak = port_cumulative.cummax()
+                    drawdown = (port_cumulative - peak) / peak
+                    max_dd_date = drawdown.idxmin()
+
+                    # 2. Individual Asset Betas
+                    returns = prices[my_tickers].pct_change().dropna()
+                    asset_betas = {}
+                    bench_var = np.var(bench_daily_returns)
+                    for t in my_tickers:
+                        cov = np.cov(returns[t], bench_daily_returns)[0][1]
+                        asset_betas[t] = cov / bench_var if bench_var > 0 else 1
+
+                    # 3. Correlation Matrix (Top Pairs)
+                    corr_matrix = returns.corr()
+                    corr_pairs = corr_matrix.unstack().sort_values(ascending=False).drop_duplicates()
+                    corr_pairs = corr_pairs[corr_pairs < 0.999].head(5)
+
+                    # 4. Generate the Markdown Report
+                    report_text = f"""### 📊 QUANT PORTFOLIO DATA EXPORT
+*Date Generated: {datetime.date.today()}*
+
+**1. TOP-LEVEL METRICS**
+- **Time-Weighted CAGR:** {port_kpis[1]*100:.2f}%
+- **Portfolio Beta:** {beta:.2f}
+- **Maximum Drawdown:** {port_kpis[3]*100:.2f}% *(Hit exact bottom on: {max_dd_date.strftime('%Y-%m-%d')})*
+- **Annual Alpha:** {alpha*100:.2f}%
+
+**2. INDIVIDUAL ASSET RISK CONTRIBUTIONS (BETAS)**
+*(Consultant: Identify which assets are causing the portfolio's volatility spikes)*
+"""
+                    for t, b in asset_betas.items():
+                        report_text += f"- **{t}**: {b:.2f}\n"
+
+                    report_text += "\n**3. HIGH CORRELATION WARNINGS**\n*(Consultant: Suggest replacement assets if portfolio lacks true diversification)*\n"
+                    for pair, val in corr_pairs.items():
+                        report_text += f"- **{pair[0]} & {pair[1]}**: {val:.2f} correlation\n"
+
+                    report_text += "\n**4. ASSET RETURN DRIVERS**\n"
+                    for index, row in summary_df.iterrows():
+                        report_text += f"- **{row['Ticker']}**: {row['Total Return (%)']:.2f}%\n"
+
+                    st.code(report_text, language='markdown')
+                    st.success("👆 Click the 'Copy' icon in the top right of the box above, and paste it into your Consultant Gem!")
