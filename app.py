@@ -21,14 +21,16 @@ REQUIRED_COLUMNS = ["Ticker", "Buy Date", "Shares", "Cost Price (Original Curren
 
 if uploaded_file is not None:
     try:
-        # utf-8-sig removes hidden BOM characters that break column name matching
+        # utf-8-sig removes hidden BOM characters
         raw_df = pd.read_csv(uploaded_file, encoding='utf-8-sig')
         
-        # Strip trailing spaces from column names to ensure perfect matching
-        raw_df.columns = raw_df.columns.str.strip()
+        # Save original columns, but use lowercase for bulletproof matching
+        orig_columns = raw_df.columns.str.strip()
+        lower_columns = orig_columns.str.lower()
+        raw_df.columns = lower_columns
         
-        # Auto-Detect Broker Export Format
-        if 'AsxCode' in raw_df.columns and 'Trade Date' in raw_df.columns:
+        # Auto-Detect Broker Export Format (Case-Insensitive)
+        if 'asxcode' in lower_columns and 'trade date' in lower_columns:
             st.sidebar.success("Broker format detected & cleaned automatically!")
             
             # Clean Tickers
@@ -44,16 +46,26 @@ if uploaded_file is not None:
                 clean_str = str(price).replace(' USD', '').replace(',', '').strip()
                 return float(clean_str)
 
-            # Map to target format
             portfolio_df = pd.DataFrame()
-            portfolio_df['Ticker'] = raw_df['AsxCode'].apply(clean_ticker)
-            # Handle standard DD/MM/YYYY format from broker
-            portfolio_df['Buy Date'] = pd.to_datetime(raw_df['Trade Date'], format='%d/%m/%Y').dt.date
-            portfolio_df['Shares'] = raw_df['Volume']
-            portfolio_df['Cost Price (Original Currency)'] = raw_df['Avg Price'].apply(clean_price)
+            portfolio_df['Ticker'] = raw_df['asxcode'].apply(clean_ticker)
+            
+            # Handle standard DD/MM/YYYY format with error coercion
+            portfolio_df['Buy Date'] = pd.to_datetime(raw_df['trade date'], format='%d/%m/%Y', errors='coerce').dt.date
+            
+            # Safely handle the Missing Volume column issue
+            if 'volume' in lower_columns:
+                portfolio_df['Shares'] = raw_df['volume']
+            elif 'qty' in lower_columns:
+                portfolio_df['Shares'] = raw_df['qty']
+            else:
+                st.sidebar.warning("No Volume/Qty column found. Defaulting to 1 share per trade.")
+                portfolio_df['Shares'] = 1
+                
+            portfolio_df['Cost Price (Original Currency)'] = raw_df['avg price'].apply(clean_price)
             
         else:
-            # Assume it's already in the target format
+            # Assume it's already in the target format, restore original cases
+            raw_df.columns = orig_columns
             portfolio_df = raw_df
             portfolio_df['Buy Date'] = pd.to_datetime(portfolio_df['Buy Date']).dt.date
             missing_cols = [col for col in REQUIRED_COLUMNS if col not in portfolio_df.columns]
