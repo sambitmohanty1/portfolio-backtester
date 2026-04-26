@@ -192,5 +192,13 @@ if st.sidebar.button("Run Real-World Backtest"):
             st.subheader("📊 Performance vs Benchmark")
             
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")}
-            col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100
+            col1.metric("Time-Weighted Return", f"{port_kpis[0]*100:.2f}%", f"vs Bench: {bench_kpis[0]*100:.2f}%")
+            col2.metric("CAGR", f"{port_kpis[1]*100:.2f}%", f"vs Bench: {bench_kpis[1]*100:.2f}%")
+            col3.metric("Alpha (Annual)", f"{alpha*100:.2f}%")
+            col4.metric("Beta vs Benchmark", f"{beta:.2f}")
+
+            col5, col6, col7, col8 = st.columns(4)
+            col5.metric("Max Drawdown", f"{port_kpis[3]*100:.2f}%")
+            col6.metric("Ann. Volatility", f"{port_kpis[2]*100:.2f}%")
+            col7.metric("Sharpe Ratio", f"{port_kpis[4]:.2f}")
+            col8.metric("Sortino Ratio", f"{port_kpis[5]:.2f}")
