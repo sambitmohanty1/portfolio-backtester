@@ -29,7 +29,7 @@ def load_data(start_date, end_date):
     tickers_to_download = ALL_TICKERS + BENCHMARKS + [FX_TICKER]
     data = yf.download(tickers_to_download, start=start_date, end=end_date)
     
-    prices = data['Adj Close'].copy()
+    prices = data['Close'].copy()
     fx_rates = prices[FX_TICKER]
     
     # Convert US assets and S&P 500 to AUD
